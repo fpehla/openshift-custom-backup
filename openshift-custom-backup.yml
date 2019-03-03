@@ -1,0 +1,55 @@
+---
+- name: Backup Openshift
+  hosts: masters
+  vars:
+     backup_base_dir: "/backup/{{ ocp_env }}"
+     scripts_dir: /tmp/openshift-custom-backup-scripts
+     local_scripts_dir: "{{ playbook_dir }}"
+
+  tasks:
+
+    - name: Check Backup Directory
+      fail: 
+        msg: " Variable 'ocp_env' is not defined"
+      when: ocp_env is not defined
+
+    - name: Create Backup Directory
+      file:
+        mode: 0755
+        path: "{{ backup_base_dir }}"
+        state: directory
+
+    - name: Create directory for backup scripts
+      file:
+        owner: root
+        group: root
+        mode: 0755
+        path: "{{ scripts_dir }}"
+        state: directory
+
+    - name: Copy backup scripts
+      copy:
+        src: "{{ item }}"
+        dest: "{{ scripts_dir }}"
+        mode: 0750
+        owner: root
+        group: root
+      with_items:
+        - "{{ local_scripts_dir }}/backup_master.sh"
+        - "{{ local_scripts_dir }}/backup_etcd_static_pod.sh"
+        - "{{ local_scripts_dir }}/backup_projects.sh"
+
+    - name: Backup Master
+      command: "{{ scripts_dir }}/backup_master.sh {{ backup_base_dir }}"
+
+    - name: Backup etcd (static pod)
+      command: "{{ scripts_dir }}/backup_etcd_static_pod.sh {{ backup_base_dir }} {{ ansible_hostname }}"
+
+    - name: Backup Projects (... this will take some time ...)
+      run_once: true
+      command: "{{ scripts_dir }}/backup_projects.sh {{ backup_base_dir }}"
+
+    - name: Remove directory for backup scripts
+      file:
+        path: "{{ scripts_dir }}"
+        state: absent
